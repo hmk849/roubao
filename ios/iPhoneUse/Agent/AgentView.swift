@@ -373,7 +373,9 @@ struct AgentView: View {
     }
 
     private var composerStyled: some View {
-        composerBase
+        // Same AnyView trick as `composer`: the checker timed out on this
+        // chain too (error moved to :376). Erase the base type first.
+        AnyView(composerBase)
             .sensoryFeedback(.start, trigger: voice.state) { _, new in new == .recording }
             .sensoryFeedback(.stop, trigger: voice.state) { old, _ in old == .recording }
             .sensoryFeedback(.error, trigger: voice.error) { _, new in new != nil }
