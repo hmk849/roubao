@@ -359,17 +359,22 @@ struct AgentView: View {
     // too long for the Swift type-checker on CI (same error, now at :359).
     // Keep each chain short; pure refactor, no UI change.
     private var composerBase: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            composerInput
-            composerMicButton
-            composerSendButton
-        }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 10)
-        .padding(.leading, 8)
-        .contentShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .onTapGesture { composerFocused = true }
-        .glass(in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        // Type-erase everything: the checker kept timing out resolving this
+        // chain's inferred type at each use site (:376, :378). AnyView caps
+        // the type at every boundary. Pure refactor, no UI change.
+        AnyView(
+            HStack(alignment: .bottom, spacing: 8) {
+                AnyView(composerInput)
+                AnyView(composerMicButton)
+                AnyView(composerSendButton)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 10)
+            .padding(.leading, 8)
+            .contentShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+            .onTapGesture { composerFocused = true }
+            .glass(in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        )
     }
 
     private var composerStyled: some View {
