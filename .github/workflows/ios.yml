@@ -10,10 +10,9 @@ on:
 
 jobs:
   build:
-    # Standard macos-26 pool kept cancelling the job after 15 min in queue
-    # ("not acquired by Runner ... capacity constraints"); larger runners
-    # use a separate pool and are free for public repos.
-    runs-on: macos-26-large
+    # Larger runners need a paid spending limit on this account, so stay
+    # on the standard pool and retry on capacity cancellations.
+    runs-on: macos-26
     timeout-minutes: 120
     steps:
       - name: Checkout
