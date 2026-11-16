@@ -1,0 +1,88 @@
+name: iOS unsigned IPA (Roubao 2.0, free-cert path)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select newest Xcode
+        run: |
+          if [ -d /Applications/Xcode.app ]; then
+            XCODE=/Applications/Xcode.app
+          else
+            XCODE=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          fi
+          echo "Using $XCODE"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+          swift --version
+
+      - name: Set up Rust target for iOS
+        run: |
+          if ! command -v rustup >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          fi
+          rustup target add aarch64-apple-ios
+          cargo --version
+          rustc --version
+
+      - name: Build libidevice for iOS (upstream script)
+        working-directory: ios
+        run: scripts/build-idevice.sh
+
+      - name: Build unsigned app (BUILTIN_VPN=NO, free-cert path)
+        working-directory: ios
+        run: |
+          xcodebuild -project iPhoneUse.xcodeproj -scheme iPhoneUse \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -derivedDataPath .build/UnsignedBuild \
+            CODE_SIGNING_ALLOWED=NO BUILTIN_VPN=NO build
+
+      - name: Package unsigned IPA
+        working-directory: ios
+        run: |
+          scripts/package-ipa.sh \
+            "$PWD/.build/UnsignedBuild/Build/Products/Release-iphoneos/iPhoneUse.app" \
+            "$PWD/output/Roubao-unsigned.ipa"
+          ls -lh output/
+
+      - name: Verify IPA
+        working-directory: ios
+        run: |
+          unzip -l output/Roubao-unsigned.ipa | head -30
+          rm -rf /tmp/roubao-verify && mkdir -p /tmp/roubao-verify
+          unzip -q output/Roubao-unsigned.ipa -d /tmp/roubao-verify
+          python3 - <<'EOF'
+          import plistlib, os
+          app = '/tmp/roubao-verify/Payload/iPhoneUse.app'
+          with open(os.path.join(app, 'Info.plist'), 'rb') as f:
+              pl = plistlib.load(f)
+          print('bundle id:', pl.get('CFBundleIdentifier'))
+          print('display name:', pl.get('CFBundleDisplayName') or pl.get('CFBundleName'))
+          print('version:', pl.get('CFBundleShortVersionString'), 'build:', pl.get('CFBundleVersion'))
+          print('min iOS:', pl.get('MinimumOSVersion'))
+          print('executable:', pl.get('CFBundleExecutable'))
+          exe = os.path.join(app, pl['CFBundleExecutable'])
+          assert os.path.isfile(exe), 'CFBundleExecutable missing!'
+          print('executable present, size:', os.path.getsize(exe))
+          print('extensions:', sorted(os.listdir(os.path.join(app, 'PlugIns'))) if os.path.isdir(os.path.join(app, 'PlugIns')) else 'none')
+          EOF
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Roubao-ios-unsigned
+          path: ios/output/Roubao-unsigned.ipa
+          if-no-files-found: error
