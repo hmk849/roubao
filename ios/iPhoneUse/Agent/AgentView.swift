@@ -316,34 +316,50 @@ struct AgentView: View {
         composerEnabled && (voice.state == .recording || voice.state == .idle && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
-    private var composer: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            VStack(alignment: .leading, spacing: 3) {
-                TextField(agent.question == nil ? (openRun != nil || agent.conversationID != nil ? "继续追问，或告诉肉包如何修改" : "告诉肉包要完成的任务") : "输入你的答复", text: $prompt, axis: .vertical)
-                    .lineLimit(1...6)
-                    .focused($composerFocused)
-                    .frame(minHeight: 34)
-                    .padding(.leading, 6)
-                if voice.state != .idle {
-                    HStack(spacing: 5) {
-                        if voice.state == .transcribing || voice.state == .starting { ProgressView().controlSize(.mini) }
-                        Text(voice.state == .recording ? "正在识别，点麦克风结束后可修改" : "正在整理识别结果…")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
+    // Split from `composer`: the whole HStack was too complex for the Swift
+    // type-checker on CI (Xcode 26.6: "unable to type-check this expression
+    // in reasonable time" at AgentView.swift:320). Pure refactor, no UI change.
+    private var composerInput: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            TextField(agent.question == nil ? (openRun != nil || agent.conversationID != nil ? "继续追问，或告诉肉包如何修改" : "告诉肉包要完成的任务") : "输入你的答复", text: $prompt, axis: .vertical)
+                .lineLimit(1...6)
+                .focused($composerFocused)
+                .frame(minHeight: 34)
+                .padding(.leading, 6)
+            if voice.state != .idle {
+                HStack(spacing: 5) {
+                    if voice.state == .transcribing || voice.state == .starting { ProgressView().controlSize(.mini) }
+                    Text(voice.state == .recording ? "正在识别，点麦克风结束后可修改" : "正在整理识别结果…")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
-            if composerEnabled {
-                MicButton(voice: voice, enabled: asr.available || (asr.provider == "openrouter" && llm.voiceAvailable)) { finishVoice(send: $0) }
-            }
-            Button(action: send) {
-                Image(systemName: voice.state == .recording ? "checkmark" : "arrow.up")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(Color(.systemBackground))
-                    .frame(width: 34, height: 34)
-                    .background(Circle().fill(canSend ? Color.primary : Color.secondary.opacity(0.4)))
-            }
-            .disabled(!canSend)
-            .accessibilityLabel(voice.state == .recording ? "结束录音并编辑" : (agent.question == nil ? "发送" : "发送答复"))
+        }
+    }
+
+    @ViewBuilder
+    private var composerMicButton: some View {
+        if composerEnabled {
+            MicButton(voice: voice, enabled: asr.available || (asr.provider == "openrouter" && llm.voiceAvailable)) { finishVoice(send: $0) }
+        }
+    }
+
+    private var composerSendButton: some View {
+        Button(action: send) {
+            Image(systemName: voice.state == .recording ? "checkmark" : "arrow.up")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(Color(.systemBackground))
+                .frame(width: 34, height: 34)
+                .background(Circle().fill(canSend ? Color.primary : Color.secondary.opacity(0.4)))
+        }
+        .disabled(!canSend)
+        .accessibilityLabel(voice.state == .recording ? "结束录音并编辑" : (agent.question == nil ? "发送" : "发送答复"))
+    }
+
+    private var composer: some View {
+        HStack(alignment: .bottom, spacing: 8) {
+            composerInput
+            composerMicButton
+            composerSendButton
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 10)
