@@ -355,7 +355,10 @@ struct AgentView: View {
         .accessibilityLabel(voice.state == .recording ? "结束录音并编辑" : (agent.question == nil ? "发送" : "发送答复"))
     }
 
-    private var composer: some View {
+    // Split from `composer` (continued): the modifier chain alone was still
+    // too long for the Swift type-checker on CI (same error, now at :359).
+    // Keep each chain short; pure refactor, no UI change.
+    private var composerBase: some View {
         HStack(alignment: .bottom, spacing: 8) {
             composerInput
             composerMicButton
@@ -367,12 +370,20 @@ struct AgentView: View {
         .contentShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
         .onTapGesture { composerFocused = true }
         .glass(in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .sensoryFeedback(.start, trigger: voice.state) { _, new in new == .recording }
-        .sensoryFeedback(.stop, trigger: voice.state) { old, _ in old == .recording }
-        .sensoryFeedback(.error, trigger: voice.error) { _, new in new != nil }
-        .padding(.horizontal, 12)
-        .padding(.bottom, 8)
-        .onChange(of: voice.state) { old, new in
+    }
+
+    private var composerStyled: some View {
+        composerBase
+            .sensoryFeedback(.start, trigger: voice.state) { _, new in new == .recording }
+            .sensoryFeedback(.stop, trigger: voice.state) { old, _ in old == .recording }
+            .sensoryFeedback(.error, trigger: voice.error) { _, new in new != nil }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
+    }
+
+    private var composer: some View {
+        composerStyled
+            .onChange(of: voice.state) { old, new in
             if new == .starting || (old == .idle && new == .recording) { voiceDraft.begin(prompt) }
             if old == .recording && new == .idle { composerFocused = true }
         }
