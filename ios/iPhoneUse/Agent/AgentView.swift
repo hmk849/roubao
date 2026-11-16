@@ -382,7 +382,10 @@ struct AgentView: View {
     }
 
     private var composer: some View {
-        composerStyled
+        // Type-erase the base: even 4 onChange modifiers on composerStyled
+        // timed out the checker (error moved to :376). AnyView caps the
+        // inferred type so each onChange resolves against a concrete type.
+        AnyView(composerStyled)
             .onChange(of: voice.state) { old, new in
             if new == .starting || (old == .idle && new == .recording) { voiceDraft.begin(prompt) }
             if old == .recording && new == .idle { composerFocused = true }
