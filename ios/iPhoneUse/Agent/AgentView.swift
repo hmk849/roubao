@@ -316,6 +316,20 @@ struct AgentView: View {
         composerEnabled && (voice.state == .recording || voice.state == .idle && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
+    // Haptics for the composer, as a ViewModifier so the solver checks the
+    // sensoryFeedback chain once, generically, instead of against the
+    // composer's concrete view type (which timed out at :378/:383).
+    // Explicit closure parameter types remove further inference work.
+    private struct ComposerHaptics: ViewModifier {
+        var voice: VoiceRecorder
+        func body(content: Content) -> some View {
+            content
+                .sensoryFeedback(.start, trigger: voice.state) { (_: VoiceRecorder.State, new: VoiceRecorder.State) in new == .recording }
+                .sensoryFeedback(.stop, trigger: voice.state) { (old: VoiceRecorder.State, _: VoiceRecorder.State) in old == .recording }
+                .sensoryFeedback(.error, trigger: voice.error) { (_: String?, new: String?) in new != nil }
+        }
+    }
+
     // Split from `composer`: the whole HStack was too complex for the Swift
     // type-checker on CI (Xcode 26.6: "unable to type-check this expression
     // in reasonable time" at AgentView.swift:320). Pure refactor, no UI change.
@@ -378,12 +392,8 @@ struct AgentView: View {
     }
 
     private var composerStyled: some View {
-        // Same AnyView trick as `composer`: the checker timed out on this
-        // chain too (error moved to :376). Erase the base type first.
         AnyView(composerBase)
-            .sensoryFeedback(.start, trigger: voice.state) { _, new in new == .recording }
-            .sensoryFeedback(.stop, trigger: voice.state) { old, _ in old == .recording }
-            .sensoryFeedback(.error, trigger: voice.error) { _, new in new != nil }
+            .modifier(ComposerHaptics(voice: voice))
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
     }
@@ -392,18 +402,19 @@ struct AgentView: View {
         // Type-erase the base: even 4 onChange modifiers on composerStyled
         // timed out the checker (error moved to :376). AnyView caps the
         // inferred type so each onChange resolves against a concrete type.
+        // Explicit closure parameter types, same reason as ComposerHaptics.
         AnyView(composerStyled)
-            .onChange(of: voice.state) { old, new in
+            .onChange(of: voice.state) { (old: VoiceRecorder.State, new: VoiceRecorder.State) in
             if new == .starting || (old == .idle && new == .recording) { voiceDraft.begin(prompt) }
             if old == .recording && new == .idle { composerFocused = true }
         }
-        .onChange(of: voice.transcript) { _, text in
+        .onChange(of: voice.transcript) { (_: String, text: String) in
             prompt = voiceDraft.update(text, current: prompt)
         }
-        .onChange(of: agent.question) { _, question in
+        .onChange(of: agent.question) { (_: String?, question: String?) in
             if question != nil { openRun = nil; setMenu(false); composerFocused = false }
         }
-        .onChange(of: agent.questionPresentationID) { _, _ in
+        .onChange(of: agent.questionPresentationID) { (_: UUID, _: UUID) in
             openRun = nil; setMenu(false); showSettings = false; showShortcutsGuide = false; showFiles = false; composerFocused = false
         }
     }
